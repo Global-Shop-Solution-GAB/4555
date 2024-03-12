@@ -1,0 +1,185 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+
+F.Intrinsic.Control.SetErrorHandler("Main_Err")
+F.Intrinsic.Control.ClearErrors
+
+'This project will modify the cost used in Auto Purchasing. The program runs from the populate hook on the automated purchasing screen (34410) 
+'Coded by: WAW
+'Date: 7/14/2016
+
+'open the conneciton
+F.ODBC.Connection!Conx.OpenConnection(V.Ambient.PDSN,V.Ambient.PUser,V.Ambient.PPass,1800)
+
+'call the calculate cost subroutine
+f.Intrinsic.Control.CallSub(CalculateCost)
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("Main_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4555_AutoPurch.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+F.Intrinsic.Control.SetErrorHandler("unload_Err")
+F.Intrinsic.Control.ClearErrors
+
+V.Local.sError.Declare(String)
+
+'close the connection
+F.ODBC.Connection!conx.Close
+
+'end the program
+F.Intrinsic.Control.End
+
+F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Label("unload_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4555_AutoPurch.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	F.Intrinsic.Control.End
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.Unload.End
+
+Program.Sub.CalculateCost.Start
+F.Intrinsic.Control.SetErrorHandler("CalculateCost_Err")
+F.Intrinsic.Control.ClearErrors
+
+v.Local..BulkDeclareString(sPart,sSql,sVendor,sVendorName,sGLAccount,sGrid,sReadRow,sUploadTypes,sUploadData,sElements,sRet,sFilter,sOrd,sLine,sError,sVendorSql)
+v.Local..BulkDeclareFloat(fCost, fVendorCost, fDemandCost,fSOqty,fWOqty, fQty, fWOCost, fSOCost, fFinalCost)
+v.Local..BulkDeclareDate(dDueDate,dCalcDate,dCompareDate)
+v.Local..BulkDeclareLong(iRowCnt,i,iLeadTime,iDateDiff)
+
+'form the part number
+f.Intrinsic.String.GSSPartString(v.Passed.000001,v.Passed.000206,v.Local.spart)
+'set the date to be calculated as the current date
+'v.Local.dcalcdate.Set(v.Ambient.Date)
+
+'create the datatable
+'create the upload datatable
+v.Local.suploadtypes.set("string*!*string*!*string*!*string*!*string*!*string*!*date*!*float")
+v.Local.suploaddata.Set("*!**!**!**!**!**!*01/01/1900*!*0")
+V.Local.sElements.Set("LOC*!*JOB*!*SUFFIX*!*SEQ*!*ORDER*!*ORDER_LINE*!*DUE_DATE*!*PO_QUANTITY")
+F.Data.DataTable.CreateFromString("dtAuto",v.Local.suploaddata,V.Local.selements,V.Local.suploadtypes,"*!*","@!@",True)
+
+'Loads name of BDF and ID into memory
+Function.Intrinsic.BDF.Load("AUX001","AUX001")
+'Copies structure of BDF and given the name 'Clone'
+Function.Intrinsic.BDF.Clone("AUX001","Clone")
+'Returns the number of rows of BDF and returns it to iRowCnt
+Function.Intrinsic.BDF.ReadRowCount("AUX001",Variable.local.iRowCnt)
+'Subtract 1 row to count rows starting from row 0 instead of 1
+Function.Intrinsic.Math.Sub(Variable.Local.iRowCnt,1,Variable.Local.iRowCnt)
+
+'Starting from 0 and looping through each row, 1 row at a time
+Function.Intrinsic.Control.For(Variable.Local.i,0,Variable.Local.iRowCnt,1)
+
+	'check to see if this is the first loop, if so delete the row
+	f.Intrinsic.Control.If(v.Local.i,=,0)
+		f.Data.DataTable.DeleteRow("dtAuto")
+	f.Intrinsic.Control.EndIf
+	'Read data from AUX001
+	Function.Intrinsic.BDF.ReadRow("AUX001",Variable.local.i,Variable.Local.sReadRow)
+	'split the return value
+	Function.Intrinsic.String.Split(Variable.Local.sReadRow,"|~|",Variable.local.sreadrow)
+	'pad the order
+	f.Intrinsic.String.LPad(v.Local.sreadrow(7),"0",7,v.Local.sord)
+	f.Intrinsic.String.LPad(v.Local.sreadrow(8),"0",3,v.Local.sline)
+
+	'make sure the due date isn't blank
+	f.Intrinsic.Control.If(v.Local.sreadrow(13),=,"")
+		v.Local.sreadrow(13).Set("01/01/1900")
+	f.Intrinsic.Control.EndIf
+	'set the final cost as 0 before looping through
+	v.Local.ffinalcost.Set(0)
+	'add a row to the datatable
+	f.Data.DataTable.AddRow("dtAuto","LOC",v.Local.sreadrow(0),"JOB",v.Local.sreadrow(3),"SUFFIX",v.Local.sreadrow(4),"SEQ",v.Local.sreadrow(5),"ORDER",v.Local.sord,"ORDER_LINE",v.Local.sline,"DUE_DATE",v.Local.sreadrow(13),"PO_QUANTITY",v.Local.sreadrow(16))
+	'build the filter
+	f.Intrinsic.String.Build("LOC = '{0}'",v.local.sreadrow(0),v.Local.sfilter)
+	'get the sum of the PO quantity based on the location
+	f.Data.DataTable.Compute("dtAuto","SUM(PO_QUANTITY)",v.Local.sfilter,v.Local.sret)
+	'set the float
+	v.Local.fqty.Set(v.Local.sret)
+
+	'Clear Vendor Name
+	v.Local.sVendorName.Set("")
+	'Clear Vendor Number
+	v.Local.sVendor.set("")	
+	'check to see if there is a WO to check
+	f.Intrinsic.Control.If(v.Local.sreadrow(3).trim,<>,"")
+		'get the WO estimated cost
+		f.Intrinsic.String.Build("Select (DOLLARS_ESTIMATED/UNITS) as DOLLARS_ESTIMATED, DATE_START from V_JOB_OPERATIONS where PART = '{0}' and FLAG_CLOSED <> 'Y' and UNITS <= '{1}' and DATE_START <= '{2}' and JOB = '{3}' and SUFFIX = '{4}'  and SEQ = '{5}' ORDER by DOLLARS_ESTIMATED ASC",v.Local.spart.trim,v.Local.fqty.Trim,v.Local.dcomparedate.PervasiveDate,v.Local.sreadrow(3).trim,v.Local.sreadrow(4).trim,v.Local.sreadrow(5),v.Local.ssql)
+		F.ODBC.Connection!conx.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	    F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,<>,True)
+			v.Local.dduedate.Set(v.ODBC.Conx!rst.FieldValTrim!DATE_START)
+			v.Local.ffinalcost.Set(v.ODBC.Conx!rst.FieldValTrim!DOLLARS_ESTIMATED)
+		f.Intrinsic.Control.EndIf
+		f.ODBC.Conx!rst.Close
+	f.Intrinsic.Control.EndIf
+	'check to see if there is a SO to check
+	f.Intrinsic.Control.If(v.Local.sord,<>,"")
+		'get the Sales Order Lines information
+		f.Intrinsic.String.Build("Select (QTY_ORDERED - QTY_SHIPPED) as QTY, (COST/QTY_ORDERED) as COST, DATE_ITEM_PROM from V_ORDER_LINES where PART = '{0}' and QTY <= '{1}' and DATE_ITEM_PROM <= '{2}' and ORDER_NO = '{3}' and RECORD_NO = '{4}'",v.Local.spart,v.Local.fqty,v.Local.dcomparedate.PervasiveDate,v.Local.sord,v.Local.sline,v.Local.ssql)
+		F.ODBC.Connection!conx.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	    F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,<>,True)
+	    	'check to see what the fFinalCost is less than the socost
+			f.Intrinsic.Control.If(v.Local.fFinalcost,>,v.ODBC.Conx!rst.FieldValTrim!COST)
+				v.Local.ffinalcost.Set(v.ODBC.Conx!rst.FieldValTrim!COST)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+		f.ODBC.Conx!rst.Close	
+	f.Intrinsic.Control.EndIf
+	'get the vendor quote information - LINES
+	f.Intrinsic.String.Build("Select V_VEND_QTE_HEADER.VENDOR, V_VEND_QTE_HEADER.LEAD_TIME, V_VEND_QTE_LINES.UNIT_PRICE from V_VEND_QTE_HEADER inner Join V_VEND_QTE_LINES on V_VEND_QTE_HEADER.PART = V_VEND_QTE_LINES.PART and V_VEND_QTE_HEADER.PART = '{0}' and V_VEND_QTE_LINES.QUANTITY <= '{1}'",v.Local.spart.Trim,v.Local.sret.Trim,v.Local.ssql)
+	F.ODBC.Connection!conx.OpenLocalRecordsetRO("rst",V.Local.sSQL)
+	 F.Intrinsic.Control.If(V.ODBC.conx!rst.EOF,<>,True)   
+		 'check to see what the fFinalCost is less than the wocost
+		f.Intrinsic.Control.If(v.Local.fFinalcost,>,v.ODBC.Conx!rst.FieldValTrim!UNIT_PRICE)
+			v.Local.ffinalcost.Set(v.ODBC.Conx!rst.FieldValTrim!UNIT_PRICE)
+			'get the vendor name
+			f.Intrinsic.String.Build("Select VENDOR, NAME_VENDOR, NORMAL_GL_ACCOUNT from V_VENDOR_MASTER where VENDOR = '{0}'",v.ODBC.Conx!rst.FieldValTrim!VENDOR,v.Local.sVendorSql)
+			F.ODBC.Connection!conx.OpenLocalRecordsetRO("rstVendor",V.Local.sSQL)
+			 F.Intrinsic.Control.If(V.ODBC.conx!rstVendor.EOF,<>,True)   
+			 	'Set the VendorName
+				v.Local.sVendorName.Set(v.ODBC.Conx!rstVendor.FieldValTrim!NAME_VENDOR)
+				'Set Vendor Number
+				v.Local.sVendor.set(v.ODBC.Conx!rstVENDOR.FieldValTrim!VENDOR)
+				'lead time
+'				v.Local.ileadtime.Set(v.ODBC.Conx!rst.FieldValTrim!LEAD_TIME)
+			f.Intrinsic.Control.EndIf
+			f.ODBC.Conx!rstvendor.close	
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.EndIf
+	f.ODBC.Conx!rst.Close		
+f.Intrinsic.Control.Next(v.Local.i)
+
+'check to see if the final cost is lower than what is already populated
+f.Intrinsic.Control.If(v.Local.ffinalcost,<,v.Passed.000088)
+	'set the cost on the screen
+	v.Passed.000088.Set(v.Local.fFinalCost)
+	'check to see if a vendor quote was found, if so populate the vendors information
+	f.Intrinsic.Control.If(v.Local.sVendor.Trim,<>,"")
+		'Vendor Name
+		v.Passed.000085.Set(v.Local.sVendorName.trim)
+		'Vendor Number
+		v.Passed.000083.Set(v.Local.sVendor.trim)
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+
+F.Intrinsic.Control.Label("CalculateCost_Err")
+F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+	Function.Intrinsic.String.Concat("Project: GCG_4555_AutoPurch.g2u",V.Ambient.Newline,V.Ambient.Newline,"Subroutine: ",V.Ambient.CurrentSubroutine,V.Ambient.NewLine,"Error Occurred ",V.Ambient.ErrorNumber," with description ",V.Ambient.ErrorDescription,V.Local.sError)
+	F.Intrinsic.UI.Msgbox(V.Local.sError)
+	f.Intrinsic.Control.CallSub(unload)
+Function.Intrinsic.Control.EndIf
+
+Program.Sub.CalculateCost.End
