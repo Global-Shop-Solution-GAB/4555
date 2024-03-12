@@ -1,0 +1,30 @@
+here is what i want to do to test this:
+
+enter 2 work orders that have a part on it that we dont have stock in. enter the costs different on each part, with 2 different required dates. 
+
+enter a sales order for the same part, with an even different cost.
+
+enter 3 vendor quotes 
+1 - beats the lowest cost requirement, but not lead time
+2 - doesnt beat the lowest cost, but is within lead time
+
+at this point we run the program, and the lowest requirement cost should appear.
+
+3 - meets the lowest cost, AND lead time.
+
+
+part = TP 29AUTOPU
+
+PURCH TEST REV 1 JOB# 508590 (100 REQUIRED - 8-10 WORK ORDER DUE) (LINE DUE - ERROR!!!) COST = 9 ------500337-001
+PURCH TEST REV 2 JOB# 508591 (1000 REQUIRED - 8-30 WORK ORDER DUE) (LINE DUE - ERROR!!!) ----- 500338 -002
+COST = 8
+
+SO# 326056 - QTY 100 - DUE 8-10-17 - COST 9.50 - SO#0000418
+
+
+quote 1 VENDOR 21 - 10 PCS = 12.00; 100 PCS = 4.00; LEAD TIME 1 DAY...EXPIRED!!!!!) - VENDOR 2000 -ACME
+QUOTE 2 VENDOR 23 - 10 PCS = 13.00; 100 PCS = 10.00; LEAD TIME 1 DAY - 300 COATING
+QUOTE 3 VENDOR 21 - 10 PCS = 12.00; 100 PCS = 7.00; LEAD TIME 100 DAYS - 400 STEEL CO
+
+
+QUOTE 4 - 10 PCS = 12.00; 100 PCS = 6.00; 110 PCS = 5.00; LEAD TIME 1 DAY - 1000 TYSON
